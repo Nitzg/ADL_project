@@ -6,10 +6,9 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 
-is_cuda = True
 
 class _netVGGFeatures(nn.Module):
-    def __init__(self):
+    def __init__(self, is_cuda):
         super(_netVGGFeatures, self).__init__()
         self.vggnet = models.vgg16(pretrained=True)
         if is_cuda:
@@ -32,10 +31,11 @@ class _netVGGFeatures(nn.Module):
 
 
 class _VGGDistance(nn.Module):
-    def __init__(self, levels):
+    def __init__(self, levels, is_cuda):
         super(_VGGDistance, self).__init__()
-        self.vgg = _netVGGFeatures()
+        self.vgg = _netVGGFeatures(is_cuda)
         self.levels = levels
+
 
     def forward(self, I1, I2):
         b_sz = I1.size(0)
@@ -48,9 +48,9 @@ class _VGGDistance(nn.Module):
         return loss
 
 class _VGGFixedDistance(nn.Module):
-    def __init__(self):
+    def __init__(self, is_cuda):
         super(_VGGFixedDistance, self).__init__()
-        self.vgg = _netVGGFeatures()
+        self.vgg = _netVGGFeatures(is_cuda)
         self.up = nn.UpsamplingBilinear2d(size=(224, 224))
 
     def forward(self, I1, I2):
@@ -67,9 +67,9 @@ class _VGGFixedDistance(nn.Module):
 
 
 class _VGGMSDistance(nn.Module):
-    def __init__(self):
+    def __init__(self, is_cuda):
         super(_VGGMSDistance, self).__init__()
-        self.vgg = _netVGGFeatures()
+        self.vgg = _netVGGFeatures(is_cuda)
         self.subs = nn.AvgPool2d(4)
 
     def forward(self, I1, I2):

@@ -20,19 +20,17 @@ ImageParams = collections.namedtuple('ImageParams', 'sz nc n mu sd')
 ImageParams.__new__.__defaults__ = (None, None, None)
 
 
-def distance_metric(sz, nc, force_l2=False):
-    #return vgg_metric._VGGMSDistance()
-    #return vgg_metric._VGGFixedDistance()
+def distance_metric(sz, nc, force_l2=False, is_cuda = True):
     if force_l2:
         return nn.L1Loss()
     if sz == 24:
-        return vgg_metric._VGGDistance(2)
+        return vgg_metric._VGGDistance(2, is_cuda)
     elif sz > 24  and sz <= 32:
-        return vgg_metric._VGGDistance(3)
+        return vgg_metric._VGGDistance(3, is_cuda)
     elif sz > 32 and sz <= 64:
-        return vgg_metric._VGGDistance(4)
+        return vgg_metric._VGGDistance(4, is_cuda)
     elif sz > 64:
-        return vgg_metric._VGGMSDistance()
+        return vgg_metric._VGGMSDistance(is_cuda)
 
 
 def sample_gaussian(x, m, is_cuda):

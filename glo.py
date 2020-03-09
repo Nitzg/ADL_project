@@ -50,13 +50,11 @@ class GLO():
         self.image_params = image_params
         self.prev_G = prev_G
 
-        # lap_criterion = pyr.MS_Lap(4, 5).cuda()
         self.dist = utils.distance_metric(image_params.sz[0], image_params.nc,
-                                          glo_params.force_l2)
+                                          glo_params.force_l2, is_cuda)
         self.l2Dist = nn.L1Loss()
         if is_cuda:
           self.l2Dist = self.l2Dist.cuda()
-        # self.dist = nn.DataParallel(self.dist)
         self.noise_amp = 0
 
         
@@ -150,7 +148,10 @@ class GLO():
         return er
 
     def visualize(self, epoch, ims_np):
-        Igen = self.netG(self.fixed_noise.cuda())
+        if self.is_cuda:
+            Igen = self.netG(self.fixed_noise.cuda())
+        else:
+            Igen = self.netG(self.fixed_noise)
         z = utils.sample_gaussian(self.netZ.emb.weight.clone().cpu(),
                                   self.vis_n, self.is_cuda)
         Igauss = self.netG(z)
