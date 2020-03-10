@@ -252,8 +252,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-    path1 = "runs/ims_glann_for_single_image(100, 3, 164, 244)/act.png"
-    path2 = "runs/ims_glann_for_single_image(100, 3, 164, 244)/actual.png"
+    path1 = "runs/image_as_input_GLO/samples"
+    path2 = "runs/image_as_input_GLO/actual"
     suffix = args.images_suffix
 
     sifid_values = calculate_sifid_given_paths(path1,path2,1,args.gpu!='',64,suffix)

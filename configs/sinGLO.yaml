@@ -5,7 +5,7 @@ glo:
   nz: 256
   batch_size: 100
   decay: 20
-  total_epoch: 300
+  total_epoch: 600
   is_cuda : False
 icp:
   dim: None

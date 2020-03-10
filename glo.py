@@ -93,10 +93,10 @@ class GLO():
         for epoch in range(opt_params.epochs):
             er = self.train_epoch(ims_np, epoch, opt_params)
             print("NAG Epoch: %d Error: %f" % (epoch, er))
-            torch.save(self.netZ.state_dict(), 'runs/nets_%s/netZ_nag.pth' % self.rn)
-            torch.save(self.netG.state_dict(), 'runs/nets_%s/netG_nag.pth' % self.rn)
-            if epoch % vis_epochs == 0 and epoch >1 and not self.isT:
-                self.visualize(epoch, ims_np)
+            torch.save(self.netZ.state_dict(), 'runs/image_as_input_GLO/nets_%s/netZ_nag.pth' % self.rn)
+            torch.save(self.netG.state_dict(), 'runs/image_as_input_GLO/nets_%s/netG_nag.pth' % self.rn)
+            #if epoch % vis_epochs == 0 and epoch >1 and not self.isT:
+                #self.visualize(epoch, ims_np)
         
             
                 
@@ -222,13 +222,7 @@ class GLOTrainer():
         self.scale = scale
         self.image_params = utils.ImageParams(sz=self.sz, nc=self.nc, n=self.n)
         self.glo = GLO(glo_params, self.image_params, rn, is_cuda, net_T, prev_G, scale)
-        if not os.path.isdir("runs"):
-            os.mkdir("runs")
-        shutil.rmtree("runs/ims_%s" % self.rn, ignore_errors=True)
-        # shutil.rmtree("nets", ignore_errors=True)
-        os.mkdir("runs/ims_%s" % self.rn)
-        if not os.path.isdir("runs/nets_%s" % self.rn):
-            os.mkdir("runs/nets_%s" % self.rn)
+        
 
     def train_glo(self, opt_params):
         G, Z, noise_amp = self.glo.train(self.ims_np, opt_params, vis_epochs= 20)

@@ -79,7 +79,7 @@ class _netG_conv(nn.Module):
         super(_netG_conv, self).__init__()
         print(nz)
         self.sz = [sz[0], sz[1]]
-        self.dim_im = 128 * (sz[0] // 4) * (sz[1] // 4)
+        self.dim_im = 32 * (sz[0] // 4) * (sz[1] // 4)
         self.cnn_layer_1 = nn.Sequential(
             # Defining a 2D convolution layer
             nn.Conv2d(3, 4, kernel_size=3, stride=1, padding=1),
@@ -93,12 +93,10 @@ class _netG_conv(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
             )
-        
-        
-        self.lin_in = nn.Linear(nz[1] * nz[2]//4, 1024, bias=False)
-        self.lin_im = nn.Linear(1024, self.dim_im, bias=False)
+        self.lin_in = nn.Linear(nz[1] * nz[2]//4, 128, bias=False)
+        self.lin_im = nn.Linear(128, self.dim_im, bias=False)
 
-        self.conv1 = nn.ConvTranspose2d(128, nz[1] * nz[2]//4, 4, 2, 1, bias=True)
+        self.conv1 = nn.ConvTranspose2d(32, nz[1] * nz[2]//4, 4, 2, 1, bias=True)
         self.conv2 = nn.ConvTranspose2d(nz[1] * nz[2]//4, nc, 4, 2, 1, bias=True)
         self.sig = nn.Sigmoid()
         self.do_bn = do_bn
@@ -109,19 +107,24 @@ class _netG_conv(nn.Module):
 
     def main(self, z):
         z = self.cnn_layer_1(z)
-        #print(z.shape)
+        #print("1: ",z.shape)
         z= self.cnn_layer_2(z)
-        #print(z.shape)
+        #print("2: ",z.shape)
         z = self.lin_in(z.reshape((z.shape[0],-1)))
         z = self.nonlin(z)
         z = self.lin_im(z)
         z = self.nonlin(z)
         #print("3: ", z.shape)
-        z = z.view(-1, 128, self.sz[0] // 4 , self.sz[1] // 4 )
+        z = z.view(-1, 32, self.sz[0] // 4 , self.sz[1] // 4 )
         #print("4: ", z.shape)
         z = self.conv1(z)
+        #print("5: ", z.shape)
+
         z = self.nonlin(z)
+        #print("6: ", z.shape)
+
         z =  self.conv2(z)
+        #print("7: ", z.shape)
         z = self.sig(z)
         
         return z
