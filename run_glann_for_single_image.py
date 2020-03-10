@@ -44,7 +44,7 @@ if __name__ == '__main__':
          
     rn = f"glann_for_single_image{data.shape}"
     decay = params['glo']['decay']
-    total_epoch = params['glo']['total_epoch']
+    total_epoch =params['glo']['total_epoch']
     lr = params['glo']['learning_rate']
     factor = params['glo']['factor']
     nz = params['glo']['nz']
@@ -53,11 +53,11 @@ if __name__ == '__main__':
     is_cuda = params['glo']['is_cuda']
     glo_params = utils.GLOParams(nz=nz, do_bn=False, force_l2=False)
     glo_opt_params = utils.OptParams(lr=lr, factor=factor, batch_size=batch_size, epochs=total_epoch,
-                                decay_epochs=decay, decay_rate=0.5)
+                                decay_epochs=decay, decay_rate=0.5,  pad_image=[0,0])
 
     
     nt = glo.GLOTrainer(data, glo_params, rn, is_cuda,[], [])
-    G, Z = nt.train_glo(glo_opt_params)
+    G, Z , noise_amp = nt.train_glo(glo_opt_params)
     
 
     # icp

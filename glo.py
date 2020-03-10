@@ -20,26 +20,28 @@ import utils
 class GLO():
     def __init__(self, glo_params, image_params, rn, is_cuda, net_T, prev_G):
         self.is_cuda = is_cuda
+        self.vis_n = 64
         if net_T:
             self.netZ = net_T
             self.isT = True
+            self.netG = model._netG_conv(glo_params.nz, image_params.sz, image_params.nc, glo_params.do_bn, prev_G)
+            fixed_noise = torch.FloatTensor(self.vis_n, glo_params.nz[0]*glo_params.nz[1]*glo_params.nz[2]).normal_(0, 1).reshape((self.vis_n, glo_params.nz[0],glo_params.nz[1],glo_params.nz[2]))
+
         else:
             self.netZ = model._netZ(glo_params.nz, image_params.n)
             self.netZ.apply(model.weights_init)
             self.isT = False
-        if self.is_cuda:
-            self.netZ.cuda()
-        self.rn = rn
-
-        self.netG = model._netG(glo_params.nz, image_params.sz, image_params.nc, glo_params.do_bn, prev_G)
+            self.netG = model._netG(glo_params.nz, image_params.sz, image_params.nc, glo_params.do_bn, prev_G)
+            fixed_noise = torch.FloatTensor(self.vis_n, glo_params.nz).normal_(0, 1)
         self.netG.apply(model.weights_init)
         if self.is_cuda:
+            self.netZ.cuda()
             self.netG.cuda()
-        # self.netG = nn.DataParallel(self.netG)
+        self.rn = rn
+        
 
-        self.vis_n = 64
+        
 
-        fixed_noise = torch.FloatTensor(self.vis_n, glo_params.nz).normal_(0, 1)
         self.fixed_noise = fixed_noise
 
         
@@ -69,14 +71,16 @@ class GLO():
           pad_image = opt_params.pad_image
           print(pad_image)
           m_image = nn.ZeroPad2d((int(pad_image[1]), int(pad_image[1]), int(pad_image[0]), int(pad_image[0])))
-          zi = self.netZ(torch.randn(1, 32).cuda())
-          zi_reshaped = zi
+          #TODO change to cuda if cuda
+          zi = self.netZ(torch.randn(1, 32))
+          #zi_reshaped = zi
           for netG in self.prev_G:
-            zi = netG(zi_reshaped)
-            zi_reshaped = zi.reshape(1,zi.shape[1]*zi.shape[2]*zi.shape[3])
+            zi = netG(zi)#_reshaped)
+            #zi_reshaped = zi.reshape(1,zi.shape[1]*zi.shape[2]*zi.shape[3])
           criterion = nn.MSELoss()
           print("shape of image, m_image")
-          image = torch.from_numpy(ims_np[0]).cuda().view(1,3, ims_np[0].shape[1],ims_np[0].shape[2])
+          # image = torch.from_numpy(ims_np[0]).cuda().view(1,3, ims_np[0].shape[1],ims_np[0].shape[2])
+          image = torch.from_numpy(ims_np[0]).view(1,3, ims_np[0].shape[1],ims_np[0].shape[2])
           print(image.shape, m_image(zi).shape)
           RMSE = torch.sqrt(criterion(image, m_image(zi)))
           print("RMSE: ", RMSE)
@@ -125,15 +129,17 @@ class GLO():
             self.netG.zero_grad()
             if not self.isT:
                 zi = self.netZ(idx) 
+                Ii = self.netG(zi.reshape(batch_size,self.glo_params.nz))
+
             else:
-                zi = self.netZ(torch.randn(1, 32).cuda())
-                zi_reshaped = zi
+                zi = self.netZ(torch.randn(1, 32))#.cuda())
+                #zi_reshaped = zi
                 for pr_G in self.prev_G:
-                    zi = pr_G(zi_reshaped)
-                    zi_reshaped = zi.reshape(1,zi.shape[1]*zi.shape[2]*zi.shape[3])
+                    zi = pr_G(zi)#_reshaped)
+                    #zi_reshaped = zi.reshape(1,zi.shape[1]*zi.shape[2]*zi.shape[3])
                 noise_ = generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]])
                 zi = self.noise_amp*noise_+zi
-            Ii = self.netG(zi.reshape(batch_size,self.glo_params.nz))
+                Ii = self.netG(zi.reshape(batch_size,zi.shape[1],zi.shape[2],zi.shape[3]))
             rec_loss = 0.5*self.l2Dist(2 * Ii - 1, 2 * image - 1) + 0.5 *self.dist(2 * Ii - 1, 2 * image - 1) 
             #print(rec_loss)
             # Backward pass and optimization step
@@ -185,7 +191,7 @@ def upsampling(im,sx,sy):
     m = nn.Upsample(size=[round(sx),round(sy)],mode='bilinear',align_corners=True)
     return m(im)
 
-def generate_noise(size,num_samp=1,device='cuda',type='gaussian', scale=1):
+def generate_noise(size,num_samp=1,device='cpu',type='gaussian', scale=1):
     if type == 'gaussian':
         noise = torch.randn(num_samp, size[0], round(size[1]/scale), round(size[2]/scale), device=device)
         noise = upsampling(noise,size[1], size[2])

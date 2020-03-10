@@ -1,0 +1,13 @@
+name: "SinGLO"
+glo:
+  learning_rate: 0.005
+  factor: 0.1
+  nz: 256
+  batch_size: 100
+  decay: 20
+  total_epoch: 300
+  is_cuda : False
+icp:
+  dim: None
+  total_epoch: None
+

@@ -45,7 +45,7 @@ if __name__ == '__main__':
     except ImportError:
         from yaml import Loader, Dumper
 
-    with open("configs/Singlann.yaml", 'r') as f:
+    with open("sinsin/configs/Singlann.yaml", 'r') as f:
         params = yaml.load(f, Loader=Loader)   
 
     G_nets = []
@@ -55,12 +55,12 @@ if __name__ == '__main__':
     Z = None
 
     
-    is_cuda = True
+    is_cuda = False
 
     # glo     
-    rn = f"image_as_input_{data[0].shape}"
+    rn = f"image_as_input_GLO{data[0].shape}"
     decay = params['glo']['decay']
-    total_epoch = 300
+    total_epoch = params['glo']['total_epoch']
     lr = params['glo']['learning_rate']
     factor = params['glo']['factor']
     nz = 256 #params['glo']['nz']
@@ -81,43 +81,54 @@ if __name__ == '__main__':
     # icp
 
     dim = params['icp']['dim']
-    nepoch = 50
+    nepoch = params['icp']['total_epoch']
 
-    W = torch.load('runs/nets_%s/netZ_nag.pth' % (rn))
-    W = W['emb.weight'].data.cpu().numpy()
+    if dim and nepoch:
 
-    netG = model._netG(nz, sz, 3)
-    if is_cuda:
-        netG = netG.cuda()
-    state_dict = torch.load('runs/nets_%s/netG_nag.pth' % (rn))
-    netG.load_state_dict(state_dict)
+        W = torch.load('runs/nets_%s/netZ_nag.pth' % (rn))
+        W = W['emb.weight'].data.cpu().numpy()
 
-    icpt = icp.ICPTrainer(W, dim, is_cuda)
-    icpt.train_icp(nepoch)
-    torch.save(icpt.icp.netT.state_dict(), 'runs/nets_%s/netT_nag.pth' % rn)
+        netG = model._netG(nz, sz, 3)
+        if is_cuda:
+            netG = netG.cuda()
+        state_dict = torch.load('runs/nets_%s/netG_nag.pth' % (rn))
+        netG.load_state_dict(state_dict)
 
-    if is_cuda:
-      z = icpt.icp.netT(torch.randn(64, dim).cuda())
-    else:
-      z = icpt.icp.netT(torch.randn(64, dim))
+        icpt = icp.ICPTrainer(W, dim, is_cuda)
+        icpt.train_icp(nepoch)
+        torch.save(icpt.icp.netT.state_dict(), 'runs/nets_%s/netT_nag.pth' % rn)
+
+        if is_cuda:
+          z = icpt.icp.netT(torch.randn(64, dim).cuda())
+        else:
+          z = icpt.icp.netT(torch.randn(64, dim))
         
-    net_T.append(icpt.icp.netT)
-    print("shape of z")
-    print(z.shape)
-    ims = netG(z)
-    print(ims.shape)
-    vutils.save_image(ims,
+        net_T.append(icpt.icp.netT)
+        print("shape of z")
+        print(z.shape)
+        ims = netG(z)
+        print(ims.shape)
+        vutils.save_image(ims,
                   'runs/ims_%s/samples.png' % (rn),
                   normalize=False)
+    else:
+      z = Z(torch.randn(64, 32))
+      ims = netG(z)
+      vutils.save_image(ims,
+                  'runs/ims_%s/samples.png' % (rn),
+                  normalize=False)
+      net_T.append(Z)
+
+
 
     for i in range(1,len(data)):
       
-      rn = f"image_as_input{data[i].shape}"
+      rn = f"image_as_input_GLO{data[i].shape}"
       decay = params['glo']['decay']
-      total_epoch = 300
+      total_epoch = params['glo']['total_epoch']
       lr = params['glo']['learning_rate']
       factor = params['glo']['factor']
-      nz = data[i-1].shape[1] * data[i-1].shape[2] *data[i-1].shape[3]
+      nz = data[i-1].shape[1:]#data[i-1].shape[1] * data[i-1].shape[2] *data[i-1].shape[3]
       batch_size = params['glo']['batch_size']
       sz = data[i].shape[2:4]
       pad_image = [(data[i].shape[2] - data[i-1].shape[2])/2, (data[i].shape[3] - data[i-1].shape[3])/2]
@@ -143,7 +154,7 @@ if __name__ == '__main__':
       for i in range(len(G_nets)-1):
         z = G_nets[i](z)
         z = z+add_noise(z,noiseAmp[i+1])
-        z = z.reshape(64, z.shape[1]*z.shape[2]*z.shape[3]) 
+        #z = z.reshape(64, z.shape[1]*z.shape[2]*z.shape[3]) 
       vutils.save_image(G(z),
                   'runs/ims_%s/samples.png' % (rn),
                   normalize=False)
