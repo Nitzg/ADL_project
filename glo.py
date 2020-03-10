@@ -18,20 +18,22 @@ import utils
 
 
 class GLO():
-    def __init__(self, glo_params, image_params, rn, is_cuda, net_T, prev_G):
+    def __init__(self, glo_params, image_params, rn, is_cuda, net_T, prev_G, scale):
         self.is_cuda = is_cuda
         self.vis_n = 64
+        self.scale = scale 
         if net_T:
             self.netZ = net_T
             self.isT = True
-            self.netG = model._netG_conv(glo_params.nz, image_params.sz, image_params.nc, glo_params.do_bn, prev_G)
+            self.netG = model._netG_conv(glo_params.nz, image_params.sz, image_params.nc, glo_params.do_bn)
             fixed_noise = torch.FloatTensor(self.vis_n, glo_params.nz[0]*glo_params.nz[1]*glo_params.nz[2]).normal_(0, 1).reshape((self.vis_n, glo_params.nz[0],glo_params.nz[1],glo_params.nz[2]))
 
         else:
             self.netZ = model._netZ(glo_params.nz, image_params.n)
             self.netZ.apply(model.weights_init)
             self.isT = False
-            self.netG = model._netG(glo_params.nz, image_params.sz, image_params.nc, glo_params.do_bn, prev_G)
+            #self.netZ = torch.randn(1, glo_params.nz)
+            self.netG = model._netG(glo_params.nz, image_params.sz, image_params.nc, glo_params.do_bn)
             fixed_noise = torch.FloatTensor(self.vis_n, glo_params.nz).normal_(0, 1)
         self.netG.apply(model.weights_init)
         if self.is_cuda:
@@ -64,23 +66,25 @@ class GLO():
 
 
     def train(self, ims_np, opt_params, vis_epochs=1):
-        prev_er = 100000
 
         # set RMSE and noiseAmp
         if self.isT:
           pad_image = opt_params.pad_image
           print(pad_image)
           m_image = nn.ZeroPad2d((int(pad_image[1]), int(pad_image[1]), int(pad_image[0]), int(pad_image[0])))
-          #TODO change to cuda if cuda
-          zi = self.netZ(torch.randn(1, 32))
+          zi = torch.randn(1, 256)
+          if self.is_cuda:
+              zi = zi.cuda()#.cuda()#self.netZ(torch.randn(1, 32).cuda())
           #zi_reshaped = zi
-          for netG in self.prev_G:
+          for netG in self.prev_G[:self.scale]:
             zi = netG(zi)#_reshaped)
             #zi_reshaped = zi.reshape(1,zi.shape[1]*zi.shape[2]*zi.shape[3])
           criterion = nn.MSELoss()
           print("shape of image, m_image")
-          # image = torch.from_numpy(ims_np[0]).cuda().view(1,3, ims_np[0].shape[1],ims_np[0].shape[2])
-          image = torch.from_numpy(ims_np[0]).view(1,3, ims_np[0].shape[1],ims_np[0].shape[2])
+          if self.is_cuda:
+            image = torch.from_numpy(ims_np[0]).cuda().view(1,3, ims_np[0].shape[1],ims_np[0].shape[2])
+          else:
+            image = torch.from_numpy(ims_np[0]).view(1,3, ims_np[0].shape[1],ims_np[0].shape[2])
           print(image.shape, m_image(zi).shape)
           RMSE = torch.sqrt(criterion(image, m_image(zi)))
           print("RMSE: ", RMSE)
@@ -99,8 +103,6 @@ class GLO():
         return self.netG, self.netZ, self.noise_amp
 
     def train_epoch(self, ims_np, epoch, opt_params):
-        #rp = np.random.permutation(self.image_params.n)
-        # Compute batch size
         batch_size =  1 #opt_params.batch_size
         batch_n = 1 #self.image_params.n // batch_size
         # Compute learning rate
@@ -128,16 +130,23 @@ class GLO():
             self.netZ.zero_grad()
             self.netG.zero_grad()
             if not self.isT:
-                zi = self.netZ(idx) 
+                zi = torch.randn(1, 256)
+                if self.is_cuda:
+                    zi = zi.cuda()#.cuda()
                 Ii = self.netG(zi.reshape(batch_size,self.glo_params.nz))
 
             else:
-                zi = self.netZ(torch.randn(1, 32))#.cuda())
+                zi = torch.randn(1, 256)#.cuda()#self.netZ(torch.randn(1, 32).cuda())
+                if self.is_cuda:
+                    zi = zi.cuda()#.cuda()
                 #zi_reshaped = zi
-                for pr_G in self.prev_G:
+                for pr_G in self.prev_G[:self.scale]:
                     zi = pr_G(zi)#_reshaped)
                     #zi_reshaped = zi.reshape(1,zi.shape[1]*zi.shape[2]*zi.shape[3])
-                noise_ = generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]])
+                if self.is_cuda:
+                  noise_ = generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]], device = 'cuda')
+                else:
+                  noise_ = generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]])
                 zi = self.noise_amp*noise_+zi
                 Ii = self.netG(zi.reshape(batch_size,zi.shape[1],zi.shape[2],zi.shape[3]))
             rec_loss = 0.5*self.l2Dist(2 * Ii - 1, 2 * image - 1) + 0.5 *self.dist(2 * Ii - 1, 2 * image - 1) 
@@ -161,12 +170,12 @@ class GLO():
         z = utils.sample_gaussian(self.netZ.emb.weight.clone().cpu(),
                                   self.vis_n, self.is_cuda)
         Igauss = self.netG(z)
-        idx = torch.from_numpy(np.arange(self.vis_n))#.cuda()
+        idx = torch.from_numpy(np.arange(self.vis_n))
         if self.is_cuda:
             idx = idx.cuda()
         Irec = self.netG(self.netZ(idx))
         
-        Iact = torch.from_numpy(ims_np[:self.vis_n])#.cuda()
+        Iact = torch.from_numpy(ims_np[:self.vis_n])
         if self.is_cuda:
             Iact = Iact.cuda()
 
@@ -204,14 +213,15 @@ def generate_noise(size,num_samp=1,device='cpu',type='gaussian', scale=1):
     return noise
 
 class GLOTrainer():
-    def __init__(self, ims_np, glo_params, rn, is_cuda, net_T, prev_G):
+    def __init__(self, ims_np, glo_params, rn, is_cuda, net_T, prev_G, scale):
         self.ims_np = ims_np
         self.sz = ims_np.shape[2:4]
         self.rn = rn
         self.nc = ims_np.shape[1]
         self.n = ims_np.shape[0]
+        self.scale = scale
         self.image_params = utils.ImageParams(sz=self.sz, nc=self.nc, n=self.n)
-        self.glo = GLO(glo_params, self.image_params, rn, is_cuda, net_T, prev_G)
+        self.glo = GLO(glo_params, self.image_params, rn, is_cuda, net_T, prev_G, scale)
         if not os.path.isdir("runs"):
             os.mkdir("runs")
         shutil.rmtree("runs/ims_%s" % self.rn, ignore_errors=True)

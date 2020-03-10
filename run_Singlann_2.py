@@ -17,8 +17,11 @@ import matplotlib.pyplot as plt
 from skimage import io as img
 import model
 
-def add_noise(z,noiseAmp):
-    noise = glo.generate_noise([z.shape[1],z.shape[2],z.shape[3]])
+def add_noise(z,noiseAmp, is_cuda):
+    if not is_cuda:
+      noise = glo.generate_noise([z.shape[1],z.shape[2],z.shape[3]])
+    else:
+      noise = glo.generate_noise([z.shape[1],z.shape[2],z.shape[3]], device='cuda')
     return noise*noiseAmp
 
 def round_down(num, divisor):
@@ -45,7 +48,7 @@ if __name__ == '__main__':
     except ImportError:
         from yaml import Loader, Dumper
 
-    with open("sinsin/configs/Singlann.yaml", 'r') as f:
+    with open("configs/sinGLO.yaml", 'r') as f:
         params = yaml.load(f, Loader=Loader)   
 
     G_nets = []
@@ -60,7 +63,7 @@ if __name__ == '__main__':
     # glo     
     rn = f"image_as_input_GLO{data[0].shape}"
     decay = params['glo']['decay']
-    total_epoch = params['glo']['total_epoch']
+    total_epoch = 10#params['glo']['total_epoch']
     lr = params['glo']['learning_rate']
     factor = params['glo']['factor']
     nz = 256 #params['glo']['nz']
@@ -72,7 +75,7 @@ if __name__ == '__main__':
 
     # add output of z to the noise
         
-    nt = glo.GLOTrainer(data[0], glo_params, rn, is_cuda, None, None)
+    nt = glo.GLOTrainer(data[0], glo_params, rn, is_cuda, None, None, 0)
     G, Z, noise_amp = nt.train_glo(glo_opt_params)
     G_nets.append(G)
     Z_nets.append(Z)
@@ -83,49 +86,22 @@ if __name__ == '__main__':
     dim = params['icp']['dim']
     nepoch = params['icp']['total_epoch']
 
-    if dim and nepoch:
-
-        W = torch.load('runs/nets_%s/netZ_nag.pth' % (rn))
-        W = W['emb.weight'].data.cpu().numpy()
-
-        netG = model._netG(nz, sz, 3)
-        if is_cuda:
-            netG = netG.cuda()
-        state_dict = torch.load('runs/nets_%s/netG_nag.pth' % (rn))
-        netG.load_state_dict(state_dict)
-
-        icpt = icp.ICPTrainer(W, dim, is_cuda)
-        icpt.train_icp(nepoch)
-        torch.save(icpt.icp.netT.state_dict(), 'runs/nets_%s/netT_nag.pth' % rn)
-
-        if is_cuda:
-          z = icpt.icp.netT(torch.randn(64, dim).cuda())
-        else:
-          z = icpt.icp.netT(torch.randn(64, dim))
-        
-        net_T.append(icpt.icp.netT)
-        print("shape of z")
-        print(z.shape)
-        ims = netG(z)
-        print(ims.shape)
-        vutils.save_image(ims,
-                  'runs/ims_%s/samples.png' % (rn),
-                  normalize=False)
-    else:
-      z = Z(torch.randn(64, 32))
-      ims = netG(z)
-      vutils.save_image(ims,
-                  'runs/ims_%s/samples.png' % (rn),
-                  normalize=False)
+    if dim == "None" or nepoch != "None":
+      print("inside if")
+      z = torch.randn(64, 256)
+      if is_cuda:
+        z = z.cuda()#.cuda()
+      print("shape of z")
+      print(z.shape)
+      ims = G(z)
+      print(ims.shape)
+      vutils.save_image(ims,'runs/ims_%s/samples.png' % (rn),normalize=False)
       net_T.append(Z)
 
-
-
-    for i in range(1,len(data)):
-      
+    for i in range(1,len(data)):     
       rn = f"image_as_input_GLO{data[i].shape}"
       decay = params['glo']['decay']
-      total_epoch = params['glo']['total_epoch']
+      total_epoch = 10#params['glo']['total_epoch']
       lr = params['glo']['learning_rate']
       factor = params['glo']['factor']
       nz = data[i-1].shape[1:]#data[i-1].shape[1] * data[i-1].shape[2] *data[i-1].shape[3]
@@ -140,7 +116,7 @@ if __name__ == '__main__':
       
 
 
-      nt = glo.GLOTrainer(data[i], glo_params, rn, is_cuda, net_T[-1], G_nets.copy())
+      nt = glo.GLOTrainer(data[i], glo_params, rn, is_cuda, net_T[-1], G_nets, i)
       G, Z, noise_amp = nt.train_glo(glo_opt_params)
       G_nets.append(G)
       noiseAmp.append(noise_amp)
@@ -148,12 +124,14 @@ if __name__ == '__main__':
       
 
       if is_cuda:
-        z = icpt.icp.netT(torch.randn(64, dim).cuda())
+        z = torch.randn(64, 256).cuda()
+        #z = net_T[-1](torch.randn(64, 32).cuda())
       else:
-        z = icpt.icp.netT(torch.randn(64, dim))
+        z = torch.randn(64, 256)
+        #z = net_T[-1](torch.randn(64, 32))
       for i in range(len(G_nets)-1):
         z = G_nets[i](z)
-        z = z+add_noise(z,noiseAmp[i+1])
+        z = z+add_noise(z,noiseAmp[i+1], is_cuda)
         #z = z.reshape(64, z.shape[1]*z.shape[2]*z.shape[3]) 
       vutils.save_image(G(z),
                   'runs/ims_%s/samples.png' % (rn),

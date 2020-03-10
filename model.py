@@ -40,7 +40,7 @@ class _netZ(nn.Module):
 
 
 class _netG(nn.Module):
-    def __init__(self, nz, sz, nc, do_bn=False, prev_G = []):
+    def __init__(self, nz, sz, nc, do_bn=False):
         super(_netG, self).__init__()
         print(nz)
         self.sz = [sz[0], sz[1]]
@@ -54,7 +54,7 @@ class _netG(nn.Module):
         self.do_bn = do_bn
 
         self.nonlin = nn.LeakyReLU(0.2, inplace=True)
-        self.prev_G = prev_G
+        
 
     def main(self, z):
         z = self.lin_in(z)
@@ -75,7 +75,7 @@ class _netG(nn.Module):
         return output
 
 class _netG_conv(nn.Module):
-    def __init__(self, nz, sz, nc, do_bn=False, prev_G = []):
+    def __init__(self, nz, sz, nc, do_bn=False):
         super(_netG_conv, self).__init__()
         print(nz)
         self.sz = [sz[0], sz[1]]
@@ -104,7 +104,7 @@ class _netG_conv(nn.Module):
         self.do_bn = do_bn
 
         self.nonlin = nn.LeakyReLU(0.2, inplace=True)
-        self.prev_G = prev_G
+        
         
 
     def main(self, z):
