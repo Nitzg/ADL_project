@@ -8,6 +8,88 @@ import numpy as np
 import torch
 import torch.nn as nn
 import vgg_metric
+import shutil
+import matplotlib.pyplot as plt
+import torchvision.utils as vutils
+import os
+
+
+def denorm(x):
+    out = (x + 1) / 2
+    return out.clamp(0, 1)
+
+def norm(x):
+    out = (x -0.5) *2
+    return out.clamp(-1, 1)
+
+def move_to_cpu(t):
+    t = t.to(torch.device('cpu'))
+    return t
+
+def upsampling(im,sx,sy):
+    m = nn.Upsample(size=[round(sx),round(sy)],mode='bilinear',align_corners=True)
+    return m(im)
+
+
+def generate_noise(size,num_samp=1,device='cpu',type='gaussian', scale=1):
+    if type == 'gaussian':
+        noise = torch.randn(num_samp, size[0], round(size[1]/scale), round(size[2]/scale), device=device)
+        noise = upsampling(noise,size[1], size[2])
+    if type =='gaussian_mixture':
+        noise1 = torch.randn(num_samp, size[0], size[1], size[2], device=device)+5
+        noise2 = torch.randn(num_samp, size[0], size[1], size[2], device=device)
+        noise = noise1+noise2
+    if type == 'uniform':
+        noise = torch.randn(num_samp, size[0], size[1], size[2], device=device)
+    return noise
+
+
+def round_down(num, divisor):
+    return num - (num%divisor)
+
+def convert_image_np(inp):
+    if inp.shape[1]==3:
+        inp = denorm(inp)
+        inp = move_to_cpu(inp[-1,:,:,:])
+        inp = inp.numpy().transpose((1,2,0))
+    else:
+        inp = denorm(inp)
+        inp = move_to_cpu(inp[-1,-1,:,:])
+        inp = inp.numpy().transpose((0,1))
+
+    inp = np.clip(inp,0,1)
+    return inp
+
+def add_noise(z,noiseAmp, is_cuda):
+    if not is_cuda:
+      noise = generate_noise([z.shape[1],z.shape[2],z.shape[3]])
+    else:
+      noise = generate_noise([z.shape[1],z.shape[2],z.shape[3]], device='cuda')
+    return noise*noiseAmp
+
+def save_images(number_of_images, G_nets, noiseAmp, path_to_folder, is_cuda, reals):
+  if not os.path.isdir(f"{path_to_folder}/samples"):
+            os.mkdir(f"{path_to_folder}/samples")
+  if not os.path.isdir(f"{path_to_folder}/actual"):
+            os.mkdir(f"{path_to_folder}/actual")
+  rounds = number_of_images//8
+  for i in range(rounds):
+    if is_cuda:
+        z = torch.randn(8, 64).cuda()
+    else:
+        z = torch.randn(8, 64)
+    for k in range(len(G_nets)-1):
+        z = G_nets[k](z)
+        z = z+add_noise(z,noiseAmp[k+1], is_cuda)
+    images = G_nets[-1](z)
+    for j in range(8):
+        vutils.save_image(images[j],
+                  f'{path_to_folder}/samples/%s.png' % (str((i*8)+j)),
+                  normalize=False)
+  for i in range(number_of_images):
+    plt.imsave(f'{path_to_folder}/actual/{i}.png', convert_image_np(reals), vmin=0, vmax=1)
+
+  
 
 
 GLOParams = collections.namedtuple('GLOParams', 'nz ngf do_bn mu sd force_l2')

@@ -18,70 +18,13 @@ from skimage import io as img
 import model
 import shutil
 
-def denorm(x):
-    out = (x + 1) / 2
-    return out.clamp(0, 1)
-
-def norm(x):
-    out = (x -0.5) *2
-    return out.clamp(-1, 1)
-
-def move_to_cpu(t):
-    t = t.to(torch.device('cpu'))
-    return t
 
 
-def add_noise(z,noiseAmp, is_cuda):
-    if not is_cuda:
-      noise = glo.generate_noise([z.shape[1],z.shape[2],z.shape[3]])
-    else:
-      noise = glo.generate_noise([z.shape[1],z.shape[2],z.shape[3]], device='cuda')
-    return noise*noiseAmp
-
-def round_down(num, divisor):
-    return num - (num%divisor)
-
-def convert_image_np(inp):
-    if inp.shape[1]==3:
-        inp = denorm(inp)
-        inp = move_to_cpu(inp[-1,:,:,:])
-        inp = inp.numpy().transpose((1,2,0))
-    else:
-        inp = denorm(inp)
-        inp = move_to_cpu(inp[-1,-1,:,:])
-        inp = inp.numpy().transpose((0,1))
-        # mean = np.array([x/255.0 for x in [125.3,123.0,113.9]])
-        # std = np.array([x/255.0 for x in [63.0,62.1,66.7]])
-
-    inp = np.clip(inp,0,1)
-    return inp
-
-def save_images(number_of_images, G_nets, path_to_folder, is_cuda, reals):
-  rounds = number_of_images//8
-  for i in range(rounds):
-    if is_cuda:
-        z = torch.randn(8, 256).cuda()
-    else:
-        z = torch.randn(8, 256)
-    for k in range(len(G_nets)-1):
-        z = G_nets[k](z)
-        z = z+add_noise(z,noiseAmp[k+1], is_cuda)
-    images = G_nets[-1](z)
-    for j in range(8):
-        vutils.save_image(images[j],
-                  'runs/image_as_input_GLO/samples/%s.png' % (str((i*8)+j)),
-                  normalize=False)
-  for i in range(number_of_images):
-    plt.imsave(f'runs/image_as_input_GLO/actual/{i}.png', convert_image_np(reals[-1]), vmin=0, vmax=1)
-
-  
-
-if __name__ == '__main__':
-    # get scaled images
+def get_scaled_images(scale,input_folder_path ):
     reals = []
-    for i in range(9):
-        reals.append(torch.load(f"scaled_im_birds/{i}"))
-        max_dim = round_down(reals[i].shape[3], 4) 
+    for i in range(scale):
+        reals.append(torch.load(f"{input_folder_path}/{i}"))
+        max_dim = utils.round_down(reals[i].shape[3], 4) 
         reals[i] = reals[i][:,:,0:max_dim, 0:max_dim]
         print(reals[i].shape)
     print(len(reals))
@@ -90,53 +33,56 @@ if __name__ == '__main__':
 
     for real in reals:
         data.append(np.vstack([real]*100))
-        print(data[-1].shape)        
-        
-    try:
-        from yaml import CLoader as Loader, CDumper as Dumper
-    except ImportError:
-        from yaml import Loader, Dumper
+        print(data[-1].shape) 
+    return reals, data       
+         
 
-    with open("sinsin/configs/sinGLO.yaml", 'r') as f:
-        params = yaml.load(f, Loader=Loader)   
+
+def run_for_image(scale,input_folder_path, output_folder_name ):
+
+    # params:
+    scale = scale
+    input_folder_path = input_folder_path
+    output_folder_name = output_folder_name
+    
+
 
     if not os.path.isdir("runs"):
             os.mkdir("runs")
-    if not os.path.isdir("runs/image_as_input_GLO"):
-            os.mkdir("runs/image_as_input_GLO")
-    if not os.path.isdir("runs/image_as_input_GLO/samples"):
-            os.mkdir("runs/image_as_input_GLO/samples")
-    if not os.path.isdir("runs/image_as_input_GLO/actual"):
-            os.mkdir("runs/image_as_input_GLO/actual")
+    if not os.path.isdir(f"runs/{output_folder_name}"):
+            os.mkdir(f"runs/{output_folder_name}")
     
-
+    
+    is_cuda = False
+    decay = 20
+    total_epoch = 600
+    lr = 0.01
+    factor = 0.1
+    batch_size = 1
     G_nets = []
     Z_nets = []
     net_T = []
     noiseAmp = []
     Z = None
-
     
-    is_cuda = True
+    reals,data = get_scaled_images(scale, input_folder_path)
 
-    # glo     
-    rn = f"{data[0].shape}"
-    shutil.rmtree("runs/image_as_input_GLO/ims_%s" %rn, ignore_errors=True)
-    os.mkdir("runs/image_as_input_GLO/ims_%s" % rn)
-    if not os.path.isdir("runs/image_as_input_GLO/nets_%s" % rn):
-        os.mkdir("runs/image_as_input_GLO/nets_%s" % rn)
-    decay = params['glo']['decay']
-    total_epoch = params['glo']['total_epoch']
-    lr = params['glo']['learning_rate']
-    factor = params['glo']['factor']
-    nz = 256 #params['glo']['nz']
-    batch_size = params['glo']['batch_size']
+    nz = 64 
+    nz_first = 64
     sz = data[0].shape[2:4]
+ 
+    rn = f"{data[0].shape}"
+    shutil.rmtree(f"runs/{output_folder_name}/ims_%s" %rn, ignore_errors=True)
+    os.mkdir(f"runs/{output_folder_name}/ims_%s" % rn)
+    if not os.path.isdir(f"runs/{output_folder_name}/nets_%s" % rn):
+        os.mkdir(f"runs/{output_folder_name}/nets_%s" % rn)
+    
+    
     glo_params = utils.GLOParams(nz=nz, do_bn=False, force_l2=False)
     glo_opt_params = utils.OptParams(lr=lr, factor=factor, batch_size=batch_size, epochs=total_epoch,
                                  decay_epochs=decay, decay_rate=0.5,  pad_image=[0,0])
 
-    # add output of z to the noise
+    
         
     nt = glo.GLOTrainer(data[0], glo_params, rn, is_cuda, None, None, 0)
     G, Z, noise_amp = nt.train_glo(glo_opt_params)
@@ -146,36 +92,30 @@ if __name__ == '__main__':
     
 
     
-    z = torch.randn(64, 256)
+    z = torch.randn(64, nz_first)
     if is_cuda:
       z = z.cuda()
     print("shape of z")
     print(z.shape)
     ims = G(z)
     print(ims.shape)
-    vutils.save_image(ims,'runs/image_as_input_GLO/ims_%s/samples.png' % (rn),normalize=False)
+    vutils.save_image(ims,f"runs/{output_folder_name}/ims_%s/samples.png" % (rn),normalize=False)
     net_T.append(Z)
+    path_to_folder = f"runs/{output_folder_name}/ims_%s"% (rn)
+    utils.save_images(512, G_nets, noiseAmp , path_to_folder, is_cuda, reals[0])
 
     for i in range(1,len(data)):     
       rn = f"{data[i].shape}"
-      shutil.rmtree("runs/image_as_input_GLO/ims_%s" % rn, ignore_errors=True)
-      os.mkdir("runs/image_as_input_GLO/ims_%s" % rn)
-      if not os.path.isdir("runs/image_as_input_GLO/nets_%s" % rn):
-        os.mkdir("runs/image_as_input_GLO/nets_%s" %rn)
-      decay = params['glo']['decay']
-      total_epoch = params['glo']['total_epoch']
-      lr = params['glo']['learning_rate']
-      factor = params['glo']['factor']
-      nz = data[i-1].shape[1:]#data[i-1].shape[1] * data[i-1].shape[2] *data[i-1].shape[3]
-      batch_size = params['glo']['batch_size']
+      shutil.rmtree(f"runs/{output_folder_name}/ims_%s" % rn, ignore_errors=True)
+      os.mkdir(f"runs/{output_folder_name}/ims_%s" % rn)
+      if not os.path.isdir(f"runs/{output_folder_name}/nets_%s" % rn):
+        os.mkdir(f"runs/{output_folder_name}/nets_%s" %rn)
+      nz = data[i-1].shape[1:]
       sz = data[i].shape[2:4]
       pad_image = [(data[i].shape[2] - data[i-1].shape[2])/2, (data[i].shape[3] - data[i-1].shape[3])/2]
-      #print(data[i].shape, data[i-1].shape)
-      #print(pad_image)
       glo_params = utils.GLOParams(nz=nz, do_bn=False, force_l2=False)
       glo_opt_params = utils.OptParams(lr=lr, factor=factor, batch_size=batch_size, epochs=total_epoch,
                                  decay_epochs=decay, decay_rate=0.5,  pad_image= pad_image)
-      
 
 
       nt = glo.GLOTrainer(data[i], glo_params, rn, is_cuda, net_T[-1], G_nets, i)
@@ -186,22 +126,23 @@ if __name__ == '__main__':
       
 
       if is_cuda:
-        z = torch.randn(8, 256).cuda()
-        #z = net_T[-1](torch.randn(64, 32).cuda())
+        z = torch.randn(8, nz_first).cuda()
       else:
-        z = torch.randn(8, 256)
-        #z = net_T[-1](torch.randn(64, 32))
+        z = torch.randn(8, nz_first)
       for i in range(len(G_nets)-1):
         z = G_nets[i](z)
-        z = z+add_noise(z,noiseAmp[i+1], is_cuda)
-        #z = z.reshape(64, z.shape[1]*z.shape[2]*z.shape[3]) 
+        z = z+utils.add_noise(z,noiseAmp[i+1], is_cuda)
       vutils.save_image(G(z),
-                  'runs/image_as_input_GLO/ims_%s/samples.png' % (rn),
+                  f"runs/{output_folder_name}/ims_%s/samples.png" % (rn),
                   normalize=False)
-    path_to_folder = "runs/image_as_input_GLO/samples"
-    save_images(1024, G_nets, path_to_folder, is_cuda, reals)
+      path_to_folder = f"runs/{output_folder_name}/ims_%s"% (rn)
+      utils.save_images(512, G_nets, noiseAmp , path_to_folder, is_cuda, reals[i])
 
 
-
+if __name__ == '__main__':
+    scales = [4,4,4,7,7,7,9,9,9]
+    input_folders = ["scaled_im_birds_4","scaled_im_mountains3_4", "scaled_im_starry_night_4", "scaled_im_birds_7","scaled_im_mountains3_7" ,"scaled_im_starry_night_7","scaled_im_birds_9", "scaled_im_mountains3_9", "scaled_im_starry_night_9"]
+    output_folder_names = ["scaled_im_birds_4","scaled_im_mountains3_4", "scaled_im_starry_night_4", "scaled_im_birds_7","scaled_im_mountains3_7" ,"scaled_im_starry_night_7","scaled_im_birds_9", "scaled_im_mountains3_9", "scaled_im_starry_night_9"]
     
-    
+    for i in range(len(scales)):
+      run_for_image(scales[i], input_folders[i], output_folder_names[i])

@@ -72,7 +72,7 @@ class GLO():
           pad_image = opt_params.pad_image
           print(pad_image)
           m_image = nn.ZeroPad2d((int(pad_image[1]), int(pad_image[1]), int(pad_image[0]), int(pad_image[0])))
-          zi = torch.randn(1, 256)
+          zi = torch.randn(1, 64)
           if self.is_cuda:
               zi = zi.cuda()#.cuda()#self.netZ(torch.randn(1, 32).cuda())
           #zi_reshaped = zi
@@ -93,8 +93,8 @@ class GLO():
         for epoch in range(opt_params.epochs):
             er = self.train_epoch(ims_np, epoch, opt_params)
             print("NAG Epoch: %d Error: %f" % (epoch, er))
-            torch.save(self.netZ.state_dict(), 'runs/image_as_input_GLO/nets_%s/netZ_nag.pth' % self.rn)
-            torch.save(self.netG.state_dict(), 'runs/image_as_input_GLO/nets_%s/netG_nag.pth' % self.rn)
+            #torch.save(self.netZ.state_dict(), 'runs/image_as_input_GLO/nets_%s/netZ_nag.pth' % self.rn)
+            #torch.save(self.netG.state_dict(), 'runs/image_as_input_GLO/nets_%s/netG_nag.pth' % self.rn)
             #if epoch % vis_epochs == 0 and epoch >1 and not self.isT:
                 #self.visualize(epoch, ims_np)
         
@@ -130,13 +130,13 @@ class GLO():
             self.netZ.zero_grad()
             self.netG.zero_grad()
             if not self.isT:
-                zi = torch.randn(1, 256)
+                zi = torch.randn(1, 64)
                 if self.is_cuda:
                     zi = zi.cuda()#.cuda()
                 Ii = self.netG(zi.reshape(batch_size,self.glo_params.nz))
 
             else:
-                zi = torch.randn(1, 256)#.cuda()#self.netZ(torch.randn(1, 32).cuda())
+                zi = torch.randn(1, 64)#.cuda()#self.netZ(torch.randn(1, 32).cuda())
                 if self.is_cuda:
                     zi = zi.cuda()#.cuda()
                 #zi_reshaped = zi
@@ -144,12 +144,12 @@ class GLO():
                     zi = pr_G(zi)#_reshaped)
                     #zi_reshaped = zi.reshape(1,zi.shape[1]*zi.shape[2]*zi.shape[3])
                 if self.is_cuda:
-                  noise_ = generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]], device = 'cuda')
+                  noise_ = utils.generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]], device = 'cuda')
                 else:
-                  noise_ = generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]])
+                  noise_ = utils.generate_noise([zi.shape[1],zi.shape[2],zi.shape[3]])
                 zi = self.noise_amp*noise_+zi
                 Ii = self.netG(zi.reshape(batch_size,zi.shape[1],zi.shape[2],zi.shape[3]))
-            rec_loss = 0.5*self.l2Dist(2 * Ii - 1, 2 * image - 1) + 0.5 *self.dist(2 * Ii - 1, 2 * image - 1) 
+            rec_loss = 1*self.l2Dist(2 * Ii - 1, 2 * image - 1) + 0 *self.dist(2 * Ii - 1, 2 * image - 1) 
             #print(rec_loss)
             # Backward pass and optimization step
             rec_loss.backward(retain_graph=True)
@@ -162,55 +162,8 @@ class GLO():
         er = er / batch_n
         return er
 
-    def visualize(self, epoch, ims_np):
-        if self.is_cuda:
-            Igen = self.netG(self.fixed_noise.cuda())
-        else:
-            Igen = self.netG(self.fixed_noise)
-        z = utils.sample_gaussian(self.netZ.emb.weight.clone().cpu(),
-                                  self.vis_n, self.is_cuda)
-        Igauss = self.netG(z)
-        idx = torch.from_numpy(np.arange(self.vis_n))
-        if self.is_cuda:
-            idx = idx.cuda()
-        Irec = self.netG(self.netZ(idx))
-        
-        Iact = torch.from_numpy(ims_np[:self.vis_n])
-        if self.is_cuda:
-            Iact = Iact.cuda()
 
-        #epoch = 0
-        # Generated images
-        vutils.save_image(Igen.data,
-                          'runs/ims_%s/generations_epoch_%03d.png' % (self.rn, epoch),
-                          normalize=False)
-        # Reconstructed images
-        vutils.save_image(Irec.data,
-                          'runs/ims_%s/reconstructions_epoch_%03d.png' % (self.rn, epoch),
-                          normalize=False)
-    
-        vutils.save_image(Iact.data,
-                          'runs/ims_%s/act.png' % (self.rn),
-                          normalize=False)
-        vutils.save_image(Igauss.data,
-                          'runs/ims_%s/gaussian_epoch_%03d.png' % (self.rn, epoch),
-                          normalize=False)
 
-def upsampling(im,sx,sy):
-    m = nn.Upsample(size=[round(sx),round(sy)],mode='bilinear',align_corners=True)
-    return m(im)
-
-def generate_noise(size,num_samp=1,device='cpu',type='gaussian', scale=1):
-    if type == 'gaussian':
-        noise = torch.randn(num_samp, size[0], round(size[1]/scale), round(size[2]/scale), device=device)
-        noise = upsampling(noise,size[1], size[2])
-    if type =='gaussian_mixture':
-        noise1 = torch.randn(num_samp, size[0], size[1], size[2], device=device)+5
-        noise2 = torch.randn(num_samp, size[0], size[1], size[2], device=device)
-        noise = noise1+noise2
-    if type == 'uniform':
-        noise = torch.randn(num_samp, size[0], size[1], size[2], device=device)
-    return noise
 
 class GLOTrainer():
     def __init__(self, ims_np, glo_params, rn, is_cuda, net_T, prev_G, scale):

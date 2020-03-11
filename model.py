@@ -44,11 +44,11 @@ class _netG(nn.Module):
         super(_netG, self).__init__()
         print(nz)
         self.sz = [sz[0], sz[1]]
-        self.dim_im = 128 * (sz[0] // 4) * (sz[1] // 4)
-        self.lin_in = nn.Linear(nz, 1024, bias=False)
-        self.lin_im = nn.Linear(1024, self.dim_im, bias=False)
+        self.dim_im = 64 * (sz[0] // 4) * (sz[1] // 4)
+        self.lin_in = nn.Linear(nz, 128, bias=False)
+        self.lin_im = nn.Linear(128, self.dim_im, bias=False)
 
-        self.conv1 = nn.ConvTranspose2d(128, nz, 4, 2, 1, bias=True)
+        self.conv1 = nn.ConvTranspose2d(64, nz, 4, 2, 1, bias=True)
         self.conv2 = nn.ConvTranspose2d(nz, nc, 4, 2, 1, bias=True)
         self.sig = nn.Sigmoid()
         self.do_bn = do_bn
@@ -61,18 +61,24 @@ class _netG(nn.Module):
         z = self.nonlin(z)
         z = self.lin_im(z)
         z = self.nonlin(z)
-        z = z.view(-1, 128, self.sz[0] // 4 , self.sz[1] // 4 )
+        z = z.view(-1, 64, self.sz[0] // 4 , self.sz[1] // 4 )
         z = self.conv1(z)
         z = self.nonlin(z)
         z =  self.conv2(z)
         z = self.sig(z)
         return z
 
+        
     def forward(self, z):
         zn = z.norm(2, 1).detach().unsqueeze(1).expand_as(z)
         z = z.div(zn)
         output = self.main(z)
         return output
+
+        '''
+        
+
+        '''
 
 class _netG_conv(nn.Module):
     def __init__(self, nz, sz, nc, do_bn=False):
