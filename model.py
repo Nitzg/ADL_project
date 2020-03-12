@@ -19,7 +19,7 @@ def weights_init(m):
     elif classname.find('Emb') != -1:
         init.normal_(m.weight, mean=0, std=0.01)
 
-
+# the final version didn't include Z
 class _netZ(nn.Module):
     def __init__(self, nz, n):
         super(_netZ, self).__init__()
@@ -68,17 +68,13 @@ class _netG(nn.Module):
         z = self.sig(z)
         return z
 
-        
+
     def forward(self, z):
         zn = z.norm(2, 1).detach().unsqueeze(1).expand_as(z)
         z = z.div(zn)
         output = self.main(z)
         return output
 
-        '''
-        
-
-        '''
 
 class _netG_conv(nn.Module):
     def __init__(self, nz, sz, nc, do_bn=False):
@@ -106,6 +102,7 @@ class _netG_conv(nn.Module):
         self.conv2 = nn.ConvTranspose2d(nz[1] * nz[2]//4, nc, 4, 2, 1, bias=True)
         self.sig = nn.Sigmoid()
         self.do_bn = do_bn
+        self.dropout = nn.Dropout(p=0.3, inplace=False)
 
         self.nonlin = nn.LeakyReLU(0.2, inplace=True)
         
@@ -123,12 +120,11 @@ class _netG_conv(nn.Module):
         #print("3: ", z.shape)
         z = z.view(-1, 32, self.sz[0] // 4 , self.sz[1] // 4 )
         #print("4: ", z.shape)
+        z = self.dropout(z)
         z = self.conv1(z)
         #print("5: ", z.shape)
-
         z = self.nonlin(z)
         #print("6: ", z.shape)
-
         z =  self.conv2(z)
         #print("7: ", z.shape)
         z = self.sig(z)
@@ -140,5 +136,4 @@ class _netG_conv(nn.Module):
         z = z.div(zn)
         output = self.main(z)
         return output
-
 

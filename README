@@ -1,0 +1,6 @@
+This project was created as part of a huji course.
+The project creates a model trying to generate images from a distribution of a single image.
+Some of the code in this project is based on the code and ideas presented in:
+https://github.com/tamarott/SinGAN
+and
+https://github.com/yedidh/glann

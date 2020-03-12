@@ -80,7 +80,6 @@ def save_images(number_of_images, G_nets, noiseAmp, path_to_folder, is_cuda, rea
         z = torch.randn(8, 64)
     for k in range(len(G_nets)-1):
         z = G_nets[k](z)
-        z = z+add_noise(z,noiseAmp[k+1], is_cuda)
     images = G_nets[-1](z)
     for j in range(8):
         vutils.save_image(images[j],
@@ -92,8 +91,8 @@ def save_images(number_of_images, G_nets, noiseAmp, path_to_folder, is_cuda, rea
   
 
 
-GLOParams = collections.namedtuple('GLOParams', 'nz ngf do_bn mu sd force_l2')
-GLOParams.__new__.__defaults__ = (None, None, None, None, None, None)
+GParams = collections.namedtuple('GParams', 'nz ngf do_bn mu sd force_l2')
+GParams.__new__.__defaults__ = (None, None, None, None, None, None)
 OptParams = collections.namedtuple('OptParams', 'lr factor ' +
                                                 'batch_size epochs ' +
                                                 'decay_epochs decay_rate lr_ratio pad_image')

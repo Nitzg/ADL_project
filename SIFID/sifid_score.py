@@ -245,18 +245,18 @@ def calculate_sifid_given_paths(path1, path2, batch_size, cuda, dims, suffix):
 if __name__ == '__main__':
     
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-    #parser.add_argument('--path2real', type=str, help=('Path to the real images'))
-    #parser.add_argument('--path2fake', type=str, help=('Path to generated images'))
+    parser.add_argument('--path2real', type=str, help=('Path to the real images'))
+    parser.add_argument('--path2fake', type=str, help=('Path to generated images'))
     parser.add_argument('-c', '--gpu', default='', type=str, help='GPU to use (leave blank for CPU only)')
     parser.add_argument('--images_suffix', default='png', type=str, help='image file suffix')
     args = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-    path1 = "runs/image_as_input_GLO/samples"
-    path2 = "runs/image_as_input_GLO/actual"
+    #path1 = "runs/image_as_input_GLO/samples"
+    #path2 = "runs/image_as_input_GLO/actual"
     suffix = args.images_suffix
 
-    sifid_values = calculate_sifid_given_paths(path1,path2,1,args.gpu!='',64,suffix)
+    sifid_values = calculate_sifid_given_paths(args.path2real,args.path2fake,1,args.gpu!='',64,suffix)
 
     sifid_values = np.asarray(sifid_values,dtype=np.float32)
     numpy.save('SIFID', sifid_values)
